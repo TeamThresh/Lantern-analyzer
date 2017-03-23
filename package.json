@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/TeamThresh/Lantern-analyzer/issues"
   },
-  "homepage": "https://github.com/TeamThresh/Lantern-analyzer#readme"
+  "homepage": "https://github.com/TeamThresh/Lantern-analyzer#readme",
+  "dependencies": {
+    "mongoose": "^4.9.1"
+  }
 }
