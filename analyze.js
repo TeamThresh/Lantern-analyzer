@@ -83,7 +83,7 @@ module.exports = {
 		// 일단 모든 raw 데이터를 가져온다
 		console.log('모든 raw 요청 쿼리');
 		var p = resourcemodels.find({}).exec();
-		p = p.then(function(err, docs) {
+		p = p.then(function(docs) {
 			return new Promise(function(resolve, reject) {
 				console.log('쿼리 반환 완료');
 				// 하나씩 순화하면서 activity stack 캡처한다
