@@ -18,19 +18,45 @@ module.exports = {
 		var packages = []; // package 관리
 		var Package = function(packageName) { // 패키지 생성자
 			return {
-				'packageName': packageName,
+				'package_name': packageName,
+				'dumps': [],
+			};
+		};
+		var Dump = function(timestamp, deviceInfo, dumpInterval) { // Dump 생성자
+			return {
+				'timestamp': timestamp,
+				'device_info': deviceInfo,
+				'dump_interval': dumpInterval,
+				'activities': [],
+				// activity 추가용 함수
+				addActivity: function(name, onCreatedCallbackTime, onResumedCallbackTime) {
+					// 이미 있으면 render 정보 추가
+					this.activites.forEach(function(a) {
+						if( a.name == name ) {
+							a.addRender(onCreatedCallbackTime, onResumedCallbackTime);
+							return;
+						}
+					});
+					// 없으면 액티비티 새로 만들고 render정보 삽입
+					var a = new Activity(name);
+					a.addRender(onCreatedCallbackTime, onResumedCallbackTime);
+				},
 				'nodes': [],
-				'links': [],
-				addNode: function(activityName) { // activity(node) 추가 함수
+				addNode: function(name) { // activity(node) 추가 함수
 					// 이미 있는 노드라면 usage 증가시킨다
 					for( var i=0; i<this.nodes.length; i++ ) {
-						if( this.nodes[i].name == activityName ) {
+						if( this.nodes[i].name == name ) {
 							this.nodes[i].usage++;
 							return;
 						}
 					}
 					// 없으니 새로 만든다
-					this.nodes.push(new Node(activityName));
+					var node = {
+						'name': name,
+						'usageCount': 1,
+						'crashCount': 0
+					};
+					this.nodes.push(node);
 				},
 				addCrashNode: function(activityName) { // activity(node)에 크래시 추가
 					for( var i=0; i<this.nodes.length; i++ ) {
@@ -40,53 +66,66 @@ module.exports = {
 						}
 					}
 				},
+				'links': [],
 				addLink: function(sourceActivityName, targetActivityName) { // relation(link) 추가 함수
-					// precondition: 이미 등록되어있는 액티비티이어야한다
-					// 액티비티 이름가지고 nodes 배열에서의 index를 찾는다
-					var sourceNodeIndex;
-					var targetNodeIndex;
-					for( var i=0; i<this.nodes.length; i++ ) {
-						if( this.nodes[i].name == sourceActivityName )
-							sourceNodeIndex = i;
-						else if( this.nodes[i].name == targetActivityName )
-							targetNodeIndex = i;
-					}
 					// 두 노드의 index 가지고 이미 있으면 value를 1 증가시킨다
 					for( var i=0; i<this.links.length; i++ ) {
-						if( this.links[i].source == sourceNodeIndex
-							&& this.links[i].target == targetNodeIndex ) {
+						if( this.links[i].source == sourceActivityName
+							&& this.links[i].target == targetActivityName ) {
 							this.links[i].value++;
 							return;
 						}
 					}
 					// 없으면 새로 만든다
-					this.links.push(new Link(sourceNodeIndex, targetNodeIndex));
+					var link = {
+						'source': sourceActivityName,
+						'target': targetActivityName,
+						'value': 1
+					};
+					this.links.push(link);
 				}
 			};
 		};
-		var Node = function(activityName) { // activity(node) 생성자
+		// Activity 생성자
+		var Activity = function(name) {
 			return {
-				'name': activityName,
-				'usage': 1,
-				'value': 0,
-				'crashCount': 0
+				'name': name,
+				'render': [],
+				addRender: function(onCreatedCallbackTime, onResumedCallbackTime) {
+					this.render.push({
+						'on_created_callback_time': onCreatedCallbackTime,
+						'on_resumed_callback_time': onResumedCallbackTime,
+						'elapsed_time': onResumedCallbackTime - onCreatedCallbackTime,
+						'timestamp': onResumedCallbackTime
+					});
+				},
+				'res': [],
+				addRes: function(threads, memory, cpu, vmstat, timestamp) {
+					this.res.push({
+						'threads': threads,
+						'memory': memory,
+						'cpu': cpu,
+						'vmstat': vmstat,
+						'timestamp': timestamp
+					});
+				},
+				'crash': [],
+				addCrash: function(name, timestamp, stacktrace) {
+					this.crash.push({
+						'name': name,
+						'timestamp': timestamp,
+						'stacktrace': stacktrace
+					});
+				}
 			};
 		};
-		var Link = function(sourceNodeIndex, targetNodeIndex) { // relation(link) 생성자
-			return {
-				'source': sourceNodeIndex,
-				'target': targetNodeIndex,
-				'value': 1
-			};
-		};
-
 		// 일단 모든 raw 데이터를 가져온다
 		console.log('모든 raw 요청 쿼리');
 		var p = resourcemodels.find({}).exec();
 		p = p.then(function(docs) {
 			return new Promise(function(resolve, reject) {
 				console.log('쿼리 반환 완료');
-				// 하나씩 순화하면서 activity stack 캡처한다
+				// dump들 순회
 				docs.forEach(function(doc, idx) {
 					// 먼저 package name이 새로운 거라면 새로 추가한다
 					// 이미 있는 거라면 그대로 가져온다
@@ -101,8 +140,12 @@ module.exports = {
 						packages.push(package);
 						return package;
 					})();
-					// data 를 돌면서 activity 스택이 변하면 반영한다
-					var stack = [];
+
+					// onCreated만 호출된 상태의 activity들
+					var tempActivities = [];
+					// 현재 열려있는 activity (activities 배열의 원소를 reference한다)
+					var topActivity = {};
+					// data 순회
 					doc.data.forEach(function(data) {
 						// res 덤프라면 액티비티 스택가지고 작업
 						if( data.type == 'res' ) {
@@ -144,6 +187,49 @@ module.exports = {
 								var lastActivityName = stack[stack.length - 1];
 								package.addCrashNode(lastActivityName);
 							}
+							// render 정보로 UI 로딩 속도와 현재 열려있는 activity를 얻는다
+						} else if( data.type == 'render' ) {
+							// onCreated일때 꼬여있을 수 있으니 onResumed까지 안왔던 같은 이름의 activity의 callback_time을 갱신한다
+							if( data.lifecycle_name == 'onCreated' ) {
+								(function() {
+									for( var activity in tempActivities ) {
+										if( activity.name == data.activity_name ) {
+											// 이미 있는 (onResumed를 기다리는) 액티비티가 있었으면
+											// 꼬인것이므로 새로온 onCreated의 callbakc time으로 갱신
+											activity.onCreatedCallbackTime = data.callback_time;
+											return;
+										}
+									}
+									// 없으면 새로 만든다
+									// 주의할 것은 tempActivities에 들어가는 activity는 진짜 activity 객체가 아니다
+									tempActivities.push({
+										'name': data.activity_name,
+										'onCreatedCallbackTime': data.callback_time
+									});
+								})();
+								// onResumed 라면
+							} else if( data.lifecycle_name == 'onResumed' ) {
+								// 여기서는 되게 중요한게
+								// onCreated와 짝을 이루어 onResumed이 된거면
+								// 그 시간을 같이 기록하고 걸린시간을 elaspedTime에 넣으면 되지만
+								// 짝이 없는 onResumed가 있다면
+								// 아마 화면나갔거나 화면을 껏다가 다시 킨것이므로
+								// 그냥 rendering 정보는 추가하지 않고 topActivity로 등록시킨다
+								(function() {
+									for( var i = 0; i < tempActivities; i++ ) {
+										var activity = tempActivities[i];
+										// tempActivities 에서 이미 기다리고 있던 activity 정보가 있다면
+										if( activity.name == data.activity_name ) {
+											activity.onResumedCallbackTime = data.callback_time;
+											// 빼내서 activities에 추가
+											tempActivities.splice(i, 1);
+											// topActivity로 지정
+											topActivity = activities[activities.length - 1];
+											// 새로운 액티비티가 열렸으니 link(relation)을 추가한다
+											package
+									}
+								})();
+							}
 						}
 					}); // end doc.data.forEach
 				}); // end docs.forEach
@@ -160,12 +246,3 @@ module.exports = {
 		return p;
 	}
 };
-
-
-
-
-
-
-
-
-
