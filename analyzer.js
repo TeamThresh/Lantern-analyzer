@@ -157,7 +157,12 @@ store.parseDatum = function(data, activities, nodes, links, status) {
 				'timestamp': data.crash_time,
 				'stacktrace': stacktrace
 			});
-			status.topActivity.crash_count++;
+			// 현재 top activity의 이름의 node에 crashcount 증가
+			nodes.forEach(function(node) {
+				if( node.name == status.topActivity.name ) {
+					node.crash_count++;
+				}
+			});
 		}
 	}
 };
