@@ -37,12 +37,13 @@ store.parseDatum = function(data, activities, nodes, links, status, createdActiv
 			// resumed 기다리고 있던 액티비티가 있으면 빼버리고 이 친구를 새로 넣는다
 			// 없으면 이 친구를 새로 넣는다
 			(function() {
-				createdActivities.forEach(function(a) {
+				for( var i = 0; i < createdActivities.length; i++ ) {
+					var a = createdActivities[i];
 					if( a.name == data.activity_name ) {
 						a.onCreatedTimestamp = data.callback_time;
 						return;
 					}
-				});
+				};
 				createdActivities.push({
 					'name': data.activity_name,
 					'onCreatedTimestamp': data.callback_time
@@ -53,10 +54,11 @@ store.parseDatum = function(data, activities, nodes, links, status, createdActiv
 		else if( data.lifecycle_name == 'onResumed' ) {
 			// 우선 activities에 있으면 꺼내고 없으면 새로 만들어 꺼내온다
 			var a = (function() {
-				activities.forEach(function(a) {
+				for( var i = 0; i < activities.length; i++ ) {
+					var a = activities[i];
 					if( a.name == data.activity_name )
 						return a;
-				});
+				};
 				var a = {
 					'name': data.activity_name,
 					'render': [],
@@ -80,12 +82,13 @@ store.parseDatum = function(data, activities, nodes, links, status, createdActiv
 			});
 			// node와 link 추가
 			(function() {
-				nodes.forEach(function(n) {
+				for( var i = 0; i < nodes.length; i++ ) {
+					var n = nodes[i];
 					if( n.name == data.activity_name ) {
 						n.usage_count++;
 						return;
 					}
-				});
+				};
 				nodes.push({
 					'name': data.activity_name,
 					'usage_count': 1,
@@ -95,12 +98,13 @@ store.parseDatum = function(data, activities, nodes, links, status, createdActiv
 			// link는 이전에 열려있던 top Activity가 있어야만 가능
 			if( status.topActivity !== undefined ) {
 				(function() {
-					links.forEach(function(l) {
+					for( var i = 0; i < links.length; i++ ) {
+						var l = links[i];
 						if( l.source == status.topActivity.name && l.target == data.activity_name ) {
 							l.value++;
 							return;
 						}
-					});
+					};
 					links.push({
 						'source': status.topActivity.name,
 						'target': data.activity_name,
