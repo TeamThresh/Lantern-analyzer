@@ -1,16 +1,16 @@
-var db = require('./db');
+var store = module.exports = {};
 
-function parsePackage(data) {
+store.parsePackage = function(data) {
 	var package = {
 		'package_name': data.package_name,
 		'dumps': []
 	};
-	var dump = parseData(data);
+	var dump = store.parseData(data);
 	package.dumps.push(dump);
 	return package;
-}
+};
 
-function parseData(data) {
+store.parseData = function(data) {
 	var dump = {
 		'timestamp': data.launch_time,
 		'device_info': data.device_info,
@@ -20,16 +20,16 @@ function parseData(data) {
 		'links': []
 	};
 
-	var topActivity = undefined;
+	var status = {};
 	var createdActivities = [];
 	data.data.forEach(function(d) {
-		parseDatum(d, dump.activities, dump.nodes, dump.links, topActivity, createdActivities);
+		store.parseDatum(d, dump.activities, dump.nodes, dump.links, status, createdActivities);
 	});
 
 	return dump;
-}
+};
 
-function parseDatum(data, activities, nodes, links, topActivity, createdActivities) {
+store.parseDatum = function(data, activities, nodes, links, status, createdActivities) {
 	// render 덤프 데이터
 	if( data.type == 'render' ) {
 		// onCreated 콜백일때
@@ -45,7 +45,7 @@ function parseDatum(data, activities, nodes, links, topActivity, createdActiviti
 				});
 				createdActivities.push({
 					'name': data.activity_name,
-					'onCreatedTimestamp': data.callback_time;
+					'onCreatedTimestamp': data.callback_time
 				});
 			})();
 		}
@@ -69,7 +69,7 @@ function parseDatum(data, activities, nodes, links, topActivity, createdActiviti
 			// createdActivities 에 있으면 render정보로도 추가
 			createdActivities.forEach(function(createdActivity, i) {
 				if( createdActivity.name == data.activity_name ) {
-					createdActivity.render.push({
+					a.render.push({
 						'on_created_timestamp': createdActivity.onCreatedTimestamp,
 						'on_resumed_timestamp': data.callback_time,
 						'elapsed_time': data.callback_time - createdActivity.onCreatedTimestamp,
@@ -92,17 +92,17 @@ function parseDatum(data, activities, nodes, links, topActivity, createdActiviti
 					'crash_count': 0
 				});
 			})();
-			// node는 이전에 열려있던 top Activity가 있어야만 가능
-			if( topActivity !== undefined ) {
+			// link는 이전에 열려있던 top Activity가 있어야만 가능
+			if( status.topActivity !== undefined ) {
 				(function() {
 					links.forEach(function(l) {
-						if( l.source == topActivity.name && l.target == data.activity_name ) {
+						if( l.source == status.topActivity.name && l.target == data.activity_name ) {
 							l.value++;
 							return;
 						}
 					});
-					l.push({
-						'source': topActivity.name,
+					links.push({
+						'source': status.topActivity.name,
 						'target': data.activity_name,
 						'value': 1
 					});
@@ -110,15 +110,50 @@ function parseDatum(data, activities, nodes, links, topActivity, createdActiviti
 			}
 
 			// top activity로 지정
-			topActivity = a;
+			status.topActivity = a;
 		}
 	}
 	// res 덤프일때
 	else if( data.type == 'res' ) {
-
+		if( status.topActivity !== undefined ) {
+			var threads = [];
+			data.app.thread_trace.forEach(function(d) {
+				threads.push({
+					'name': d.thread_name,
+					'stacktrace': d.trace_list
+				});
+			});
+			var cpu = {};
+			cpu = data.app.cpu_app;
+			Object.keys(data.os.cpu).forEach(function(d) {
+				cpu[d] = data.os.cpu[d];
+			});
+			status.topActivity.res.push({
+				'threads': threads,
+				'memory': data.app.memory,
+				'cpu': cpu,
+				'vmstat': data.os.vmstat,
+				'timestamp': data.duration_time.end
+			});
+		}
 	}
 	// crash 덤플일때
 	else if( data.type == 'crash' ) {
-
+		if( status.topActivity !== undefined ) {
+			var crashName;
+			if( data.stacktrace.indexOf(': ') < 0 )
+				crashName = '';
+			else
+				crashName = data.stacktrace.split(': ')[0];
+			var stacktrace = [];
+			if( crashName != '' ) {
+				stacktrace = data.stacktrace.split(crashName + ': ')[1].replace('\t').split('\n');
+			}
+			status.topActivity.crash.push({
+				'name': crashName,
+				'timestamp': data.crash_time,
+				'stacktrace': stacktrace
+			});
+		}
 	}
-}
+};
