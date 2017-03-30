@@ -21,15 +21,14 @@ store.parseData = function(data) {
 	};
 
 	var status = {};
-	var createdActivities = [];
 	data.data.forEach(function(d) {
-		store.parseDatum(d, dump.activities, dump.nodes, dump.links, status, createdActivities);
+		store.parseDatum(d, dump.activities, dump.nodes, dump.links, status);
 	});
 
 	return dump;
 };
 
-store.parseDatum = function(data, activities, nodes, links, status, createdActivities) {
+store.parseDatum = function(data, activities, nodes, links, status) {
 	// render 덤프 데이터
 	if( data.type == 'render' ) {
 		// onCreated 콜백일때
@@ -37,14 +36,14 @@ store.parseDatum = function(data, activities, nodes, links, status, createdActiv
 			// resumed 기다리고 있던 액티비티가 있으면 빼버리고 이 친구를 새로 넣는다
 			// 없으면 이 친구를 새로 넣는다
 			(function() {
-				for( var i = 0; i < createdActivities.length; i++ ) {
-					var a = createdActivities[i];
+				for( var i = 0; i < status.createdActivities.length; i++ ) {
+					var a = status.createdActivities[i];
 					if( a.name == data.activity_name ) {
 						a.onCreatedTimestamp = data.callback_time;
 						return;
 					}
 				};
-				createdActivities.push({
+				status.createdActivities.push({
 					'name': data.activity_name,
 					'onCreatedTimestamp': data.callback_time
 				});
@@ -68,8 +67,8 @@ store.parseDatum = function(data, activities, nodes, links, status, createdActiv
 				activities.push(a);
 				return a;
 			})();
-			// createdActivities 에 있으면 render정보로도 추가
-			createdActivities.forEach(function(createdActivity, i) {
+			// status.createdActivities 에 있으면 render정보로도 추가
+			status.createdActivities.forEach(function(createdActivity, i) {
 				if( createdActivity.name == data.activity_name ) {
 					a.render.push({
 						'on_created_timestamp': createdActivity.onCreatedTimestamp,
@@ -77,7 +76,7 @@ store.parseDatum = function(data, activities, nodes, links, status, createdActiv
 						'elapsed_time': data.callback_time - createdActivity.onCreatedTimestamp,
 						'timestamp': data.callback_time
 					});
-					createdActivities.splice(i, 1);
+					status.createdActivities.splice(i, 1);
 				}
 			});
 			// node와 link 추가
@@ -158,6 +157,7 @@ store.parseDatum = function(data, activities, nodes, links, status, createdActiv
 				'timestamp': data.crash_time,
 				'stacktrace': stacktrace
 			});
+			status.topActivity.crash_count++;
 		}
 	}
 };
