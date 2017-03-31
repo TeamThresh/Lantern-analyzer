@@ -21,7 +21,7 @@ store.parseData = function(data) {
 	};
 
 	var status = {};
-	data.data.forEach(function(d) {
+	data.data.forEach(function(d, i) {
 		store.parseDatum(d, dump.activities, dump.nodes, dump.links, status);
 	});
 
