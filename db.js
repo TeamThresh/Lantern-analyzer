@@ -2,10 +2,11 @@ var mongodb = require('mongodb');
 var mongoClient = mongodb.MongoClient;
 var p; // Promise
 var store = module.exports = {};
+var mongodbServerIp = '10.99.0.11';
 
 // db 연결 및 model 생성
 store.mongodb = mongodb;
-store.p = mongoClient.connect('mongodb://localhost').then(function(db) {
+store.p = mongoClient.connect('mongodb://' + mongodbServerIp).then(function(db) {
 	return new Promise(function(s, f) {
 		db = db.db('lantern_raw_db');
 		store.resourcemodels = db.collection('resourcemodels');
